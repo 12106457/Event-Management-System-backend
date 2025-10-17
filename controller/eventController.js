@@ -80,6 +80,7 @@ exports.getEventsByProfile = async (req, res) => {
 };
 
 
+
 exports.updateEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
@@ -92,9 +93,6 @@ exports.updateEvent = async (req, res) => {
     const previousValues = {};
     const updatedValues = {};
 
-    // --- Helper: normalize date for accurate comparison ---
-    const normalize = (date) => dayjs(date).second(0).millisecond(0);
-
     // --- Profiles update ---
     if (profiles) {
       const profileObjs = await Profile.find({ _id: { $in: profiles } }, "name");
@@ -104,26 +102,38 @@ exports.updateEvent = async (req, res) => {
       if (oldIds !== newIds) {
         previousValues.profiles = event.profiles.map((p) => p.name);
         updatedValues.profiles = profileObjs.map((p) => p.name);
-        const newNames = profileObjs.map((p) => p.name).join(", ");
-        messages.push(`Profiles changed to: ${newNames}`);
+        messages.push(`Profiles changed to: ${updatedValues.profiles.join(", ")}`);
         event.profiles = profileObjs;
       }
     }
 
     // --- Start date/time update ---
-    if (start && !normalize(start).isSame(normalize(event.start))) {
-      previousValues.start = event.start;
-      updatedValues.start = dayjs(start).tz(newTimezone || event.timezone).toDate();
-      messages.push("Start date/time updated");
-      event.start = updatedValues.start;
+    if (start) {
+      const startUTC = dayjs(start).toISOString();
+      const eventStartUTC = dayjs(event.start).toISOString();
+      if (startUTC !== eventStartUTC) {
+        previousValues.start = event.start;
+        updatedValues.start = startUTC; // store in UTC
+        messages.push("Start date/time updated");
+        // Only apply timezone conversion if timezone actually changed
+        event.start = newTimezone && newTimezone !== event.timezone
+          ? dayjs(start).tz(newTimezone).toDate()
+          : new Date(startUTC);
+      }
     }
 
     // --- End date/time update ---
-    if (end && !normalize(end).isSame(normalize(event.end))) {
-      previousValues.end = event.end;
-      updatedValues.end = dayjs(end).tz(newTimezone || event.timezone).toDate();
-      messages.push("End date/time updated");
-      event.end = updatedValues.end;
+    if (end) {
+      const endUTC = dayjs(end).toISOString();
+      const eventEndUTC = dayjs(event.end).toISOString();
+      if (endUTC !== eventEndUTC) {
+        previousValues.end = event.end;
+        updatedValues.end = endUTC; // store in UTC
+        messages.push("End date/time updated");
+        event.end = newTimezone && newTimezone !== event.timezone
+          ? dayjs(end).tz(newTimezone).toDate()
+          : new Date(endUTC);
+      }
     }
 
     // --- Timezone update ---
@@ -141,7 +151,7 @@ exports.updateEvent = async (req, res) => {
     let log = null;
     if (messages.length > 0) {
       log = {
-        updatedBy, // must be ObjectId
+        updatedBy,
         message: messages.join(", "),
         previousValues,
         updatedValues,
