@@ -15,6 +15,9 @@ app.use(bodyParser.json());
 // Routes
 app.use('/api/profiles', profileRoutes);
 app.use('/api/events', eventRoutes);
+app.get("/",(req,res)=>{
+    res.send("welcome to event management system")
+})
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
